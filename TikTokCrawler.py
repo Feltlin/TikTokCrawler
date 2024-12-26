@@ -2,6 +2,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os
@@ -67,8 +68,6 @@ def DownloadByLink():
 def LinkDownload(linkEntry):
     link = linkEntry.get()
     driver = OpenDriver(link)
-    # Login(driver, link)
-    #Upload video.
     captcha = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.XPATH, '//*[@id="captcha_close_button"]'))
     )
@@ -100,6 +99,82 @@ def LinkDownload(linkEntry):
     
     time.sleep(10)
     driver.quit()
+
+def DownloadByID():
+    downloadWindow = Toplevel()
+    downloadWindow.geometry("400x300")
+    downloadWindow.config(bg = "#000000")
+    downloadWindow.attributes('-topmost', True)
+    Label(downloadWindow, text = "Paste User ID", fg = "#ffffff", bg = "black").pack()
+    IDEntry = Entry(downloadWindow, fg = "#ffffff", bg = "black")
+    IDEntry.pack()
+    linkButton = Button(
+        downloadWindow,
+        text = "Download",
+        image = download_logo,
+        bg = "black",
+        fg = "white",
+        compound = LEFT,
+        width = 100,
+        command = lambda:IDDownload(IDEntry, downloadWindow),
+    )
+    linkButton.pack()
+
+def IDDownload(IDEntry, downloadWindow):
+    userID = IDEntry.get()
+    url = "https://www.tiktok.com/@"
+    driver = OpenDriver(url + userID)
+    Login(driver, url)
+    try:
+        captcha = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="captcha_close_button"]'))
+        )
+        Label(downloadWindow, text = "Captcha detected. Solve and click Next.", fg = "#ffffff", bg = "black").pack()
+        Button(
+            downloadWindow,
+            text = "Next",
+            image = download_logo,
+            bg = "black",
+            fg = "white",
+            compound = LEFT,
+            width = 100,
+            command = lambda: IDVideoDownload(driver, userID),
+        ).pack()
+        driver.refresh()
+    except TimeoutException:
+        IDVideoDownload(driver, userID)
+        time.sleep(10)
+        driver.quit()
+    
+def IDVideoDownload(driver, userID):
+    videoLinks = driver.find_elements(By.TAG_NAME, "a")
+    videoLinks = [videoLink.get_attribute("href") for videoLink in videoLinks]
+    videoLinks = [videoLink for videoLink in videoLinks if videoLink and "/video/" in videoLink]
+    for link in videoLinks:
+        print(link)
+        driver = OpenDriver(link)
+        Login(driver, link)
+        videoLink = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "source"))
+        )
+        videoLink = videoLink.get_attribute("src")
+        print("Got the link.")
+        cookies = driver.get_cookies()
+        cookies = {cookie["name"]: cookie["value"] for cookie in cookies}
+        response = requests.get(videoLink, stream=True, cookies = cookies)
+
+        if response.status_code == 200:
+            date = datetime.datetime.fromtimestamp(int(bin(int(link.split('/')[-1]))[2:][:31], 2)).strftime('%Y-%m-%d_%H-%M-%S')
+            if not os.path.exists(f"./ByUserID/{userID}"):
+                os.makedirs(f"./ByUserID/{userID}")
+            with open(f"./ByUserID/{userID}/{userID}_{date}.mp4", "wb") as file:
+                for chunk in response.iter_content(chunk_size = None):
+                    if chunk:
+                        file.write(chunk)
+            print("Video downloaded successfully!")
+        else:
+            print(f"Failed to download video. Status code: {response.status_code}")
+    
     
 def OpenDriver(url):
     service = Service(executable_path="./Driver/chromedriver.exe")
@@ -180,46 +255,8 @@ downloadByIDButton = Button(
     fg = "white",
     compound = LEFT,
     width = 100,
-    command = Download,
+    command = DownloadByID,
 )
 downloadByIDButton.pack()
 
 window.mainloop()
-
-# service = Service(executable_path="./Driver/chromedriver.exe")
-# driver = webdriver.Chrome(service=service)
-# url = "https://www.tiktok.com"
-
-# driver.get(url)
-# try:
-#     #Open cookies to auto login.
-#     with open("cookies.pkl", 'rb') as f:
-#         cookies = pickle.load(f)
-#         for cookie in cookies:
-#             driver.add_cookie(cookie)
-#         driver.refresh()
-#         input("Log in successfully! Press Enter to continue...")
-
-#         #Upload video.
-#         upload = WebDriverWait(driver, 10).until(
-#             EC.presence_of_element_located((By.LINK_TEXT, "Upload"))
-#         )
-#         upload.click()
-#         input("Clicked! Press Enter to continue...")
-
-#         file_input = driver.find_element(By.XPATH, '//input[@type="file"]')
-#         video_path = r"D:\Code\Python\WebCrawler\bjarnson_fitness\video\2024-09-30_15-23-15_2.mp4"
-#         file_input.send_keys(video_path)
-#         input("Uploading! Press Enter to continue...")
-
-# #Login manually if cookies not found.
-# except FileNotFoundError:
-#     print("No cookies found.")
-#     driver.get(url)
-#     input("Please log in manually this time and press Enter to continue......")
-#     with open("cookies.pkl", 'wb') as f:
-#         pickle.dump(driver.get_cookies(), f)
-#     driver.get(url)
-
-# time.sleep(5)
-# driver.quit()
